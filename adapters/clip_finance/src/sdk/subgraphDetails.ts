@@ -59,6 +59,12 @@ export const getUserBalanceSnapshotAtBlock = async (
     const query = `{
             sharePrices(
                 ${blockQuery}
+                where: {
+                  or: [
+                    { id: "0x7c825e560ae6d6643115096b4b61e8f8d6a19749" },
+                    { id: "0xf37d1f5dc65fe553745c79459004e94af9f61ff3" }
+                  ]
+                }
                 first:1000, skip:${skip}
             ){
               id
@@ -99,18 +105,21 @@ export const getUserBalanceSnapshotAtBlock = async (
     let data = await response.json();
     let snapshots = data.data.sharePrices;
     for (const snapshot of snapshots) {
-      const sharePriceSnapshot: SharePricesSnapshot = {
-        id: snapshot.id,
-        price0: Big(snapshot.price0),
-        price01: Big(snapshot.price01),
-        price1 : Big(snapshot.price1),
-        price10: Big(snapshot.price10),
-        token0 : snapshot.token0,
-        token0Symbol: snapshot.token0Symbol,
-        token1      : snapshot.token1,
-        token1Symbol: snapshot.token1Symbol,
+        //mendi wEth LEVERAGE AND non LEVERAGE pools
+        if ((snapshot.id.toLowerCase() == "0x7c825e560Ae6d6643115096B4B61e8f8d6a19749".toLowerCase()) || (snapshot.id.toLowerCase() == "0xF37d1F5DC65fe553745c79459004E94Af9F61Ff3".toLocaleLowerCase())) {
+        const sharePriceSnapshot: SharePricesSnapshot = {
+          id: snapshot.id,
+          price0: Big(snapshot.price0),
+          price01: Big(snapshot.price01),
+          price1 : Big(snapshot.price1),
+          price10: Big(snapshot.price10),
+          token0 : snapshot.token0,
+          token0Symbol: snapshot.token0Symbol,
+          token1      : snapshot.token1,
+          token1Symbol: snapshot.token1Symbol,
+        }
+        sharePricesMap.set(snapshot.id, sharePriceSnapshot);
       }
-      sharePricesMap.set(snapshot.id, sharePriceSnapshot);
     } 
     if (snapshots.length < 1000) {
       fetchNext = false;
@@ -175,58 +184,60 @@ export const getUserBalanceSnapshotAtBlock = async (
     let snapshots = data.data.userShares;
     for (const snapshot of snapshots) {
       const contract = "0x".concat(snapshot.id.substring(42));  
-      const sharePrice = sharePricesMap.get(contract);
-      const user       = snapshot.id.substring(0, 42);
-      if (sharePrice) {
-        let userBalanceSnapshot: UserBalanceSnapshot = {
-          id: "",
-          balance: Big(0),
-          token  : "",
-          tokenSymbol: "",
-          
-        };
-        if (sharePrice.price0.gt(0)) {
-          userBalanceSnapshot = {
-            id: user.toLowerCase(),
-            balance: Big(Math.round(Big(snapshot.shares0).mul(sharePrice.price0).div(1e18).toNumber())),
-            token  : sharePrice.token0.toLowerCase(),
-            tokenSymbol: sharePrice.token0Symbol,
+      if (sharePricesMap.has(contract)) {
+        const sharePrice = sharePricesMap.get(contract);
+        const user       = snapshot.id.substring(0, 42);
+        if (sharePrice) {
+          let userBalanceSnapshot: UserBalanceSnapshot = {
+            id: "",
+            balance: Big(0),
+            token  : "",
+            tokenSymbol: "",
             
+          };
+          if (sharePrice.price0.gt(0)) {
+            userBalanceSnapshot = {
+              id: user.toLowerCase(),
+              balance: Big(Math.round(Big(snapshot.shares0).mul(sharePrice.price0).div(1e18).toNumber())),
+              token  : sharePrice.token0.toLowerCase(),
+              tokenSymbol: sharePrice.token0Symbol,
+              
+            }
+            addBalance(userBalanceSnapshot, snapshot);
           }
-          addBalance(userBalanceSnapshot, snapshot);
-        }
-        if (sharePrice.price01.gt(0))  {
-          userBalanceSnapshot = {
-            id: user.toLowerCase(),
-            balance: Big(Math.round(Big(snapshot.shares0).mul(sharePrice.price01).div(1e18).toNumber())),
-            token  : sharePrice.token1.toLowerCase(),
-            tokenSymbol: sharePrice.token1Symbol,
-            
+          if (sharePrice.price01.gt(0))  {
+            userBalanceSnapshot = {
+              id: user.toLowerCase(),
+              balance: Big(Math.round(Big(snapshot.shares0).mul(sharePrice.price01).div(1e18).toNumber())),
+              token  : sharePrice.token1.toLowerCase(),
+              tokenSymbol: sharePrice.token1Symbol,
+              
+            }
+            addBalance(userBalanceSnapshot, snapshot);
           }
-          addBalance(userBalanceSnapshot, snapshot);
-        }
-        if (sharePrice.price1.gt(0))  {
-          userBalanceSnapshot = {
-            id: user.toLowerCase(),
-            balance: Big(Math.round(Big(snapshot.shares1).mul(sharePrice.price1).div(1e18).toNumber())),
-            token  : sharePrice.token1.toLowerCase(),
-            tokenSymbol: sharePrice.token1Symbol,    
+          if (sharePrice.price1.gt(0))  {
+            userBalanceSnapshot = {
+              id: user.toLowerCase(),
+              balance: Big(Math.round(Big(snapshot.shares1).mul(sharePrice.price1).div(1e18).toNumber())),
+              token  : sharePrice.token1.toLowerCase(),
+              tokenSymbol: sharePrice.token1Symbol,    
+            }
+            addBalance(userBalanceSnapshot, snapshot);
           }
-          addBalance(userBalanceSnapshot, snapshot);
-        }
-        if (sharePrice.price10.gt(0))  {
-          userBalanceSnapshot = {
-            id: user.toLowerCase(),
-            balance: Big(Math.round(Big(snapshot.shares1).mul(sharePrice.price10).div(1e18).toNumber())),
-            token  : sharePrice.token0.toLowerCase(),
-            tokenSymbol: sharePrice.token0Symbol,
-            
+          if (sharePrice.price10.gt(0))  {
+            userBalanceSnapshot = {
+              id: user.toLowerCase(),
+              balance: Big(Math.round(Big(snapshot.shares1).mul(sharePrice.price10).div(1e18).toNumber())),
+              token  : sharePrice.token0.toLowerCase(),
+              tokenSymbol: sharePrice.token0Symbol,
+              
+            }
+            addBalance(userBalanceSnapshot, snapshot);
+          } 
+        } else {
+          if (Big(snapshot.shares0).gt(0)) {
+            strategyRouterSharesMap.set(snapshot.id, snapshot);
           }
-          addBalance(userBalanceSnapshot, snapshot);
-        } 
-      } else {
-        if (Big(snapshot.shares0).gt(0)) {
-          strategyRouterSharesMap.set(snapshot.id, snapshot);
         }
       }
     } 
@@ -237,7 +248,7 @@ export const getUserBalanceSnapshotAtBlock = async (
     }
   }
 
-  const query = `{
+  /*const query = `{
     sharesTokenSharesCounts (
       ${blockQuery}
     ){
@@ -297,7 +308,7 @@ export const getUserBalanceSnapshotAtBlock = async (
         }
       }
     });
-  }
+  }*/
   
   return Array.from(balanceMap.values());
 };

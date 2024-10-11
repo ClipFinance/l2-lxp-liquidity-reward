@@ -50,12 +50,10 @@ export const getUserTVLByBlock = async (blocks: BlockData) => {
 
 const readBlocksFromCSV = async (filePath: string): Promise<BlockData[]> => {
   const blocks: BlockData[] = [];
-
   await new Promise<void>((resolve, reject) => {
       fs.createReadStream(filePath)
-      .pipe(csv()) // Specify the separator as '\t' for TSV files
+      .pipe(csv({ separator: ';' })) // Specify the separator as '\t' for TSV files
       .on('data', (row) => {
-         
           const blockNumber = parseInt(row.number, 10); 
           const blockTimestamp = parseInt(row.timestamp, 10);
           if (!isNaN(blockNumber) && blockTimestamp) {
@@ -74,7 +72,7 @@ const readBlocksFromCSV = async (filePath: string): Promise<BlockData[]> => {
 };
 
 readBlocksFromCSV('hourly_blocks.csv').then(async (blocks: any[]) => {
-  console.log(blocks);
+
   const allCsvRows: any[] = []; 
   
   for (const block of blocks) {
